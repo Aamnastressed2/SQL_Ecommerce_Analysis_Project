@@ -1,95 +1,115 @@
--- ============================================
--- Project: Employee Analytics System
--- Skills Used: Joins, Subqueries, Window Functions, CASE, Aggregations
--- Description: Analyzed employee data to extract insights on salary distribution,
--- department performance, and employee ranking.
--- ============================================
 
--- ============================================
--- 1. Employee Overview
--- ============================================
+-- Orders per country
+SELECT cus.country, COUNT(DISTINCT ord.order_id) AS total_orders
+FROM customers AS cus
+INNER JOIN orders AS ord
+	ON cus.customer_id = ord.customer_id
+GROUP BY cus.country;
 
-SELECT 
-    CONCAT(emp.first_name, ' ', emp.last_name) AS full_name,
-    emp.department,
-    dep.manager_name,
-    emp.salary
-FROM employees emp
-LEFT JOIN departments dep
-ON emp.department = dep.department
-ORDER BY emp.department;
+-- Total sales per customer
+SELECT cus.name,
+SUM(par.quantity * p.price) AS total_spent
+FROM customers AS cus
+INNER JOIN orders AS ord
+	ON cus.customer_id = ord.customer_id
+INNER JOIN order_items AS par
+	ON ord.order_id = par.order_id
+INNER JOIN products AS p
+	ON par.product_id = p.product_id
+GROUP BY cus.name;
 
--- ============================================
--- 2. Department Insights
--- ============================================
+-- Total revenue
+SELECT SUM(par.quantity * p.price) AS total_revenue
+FROM order_items AS par
+INNER JOIN products AS p
+	ON par.product_id = p.product_id;
+    
+-- Top customers
 
-SELECT 
-    department,
-    COUNT(*) AS total_employees,
-    AVG(salary) AS avg_salary,
-    MAX(salary) AS highest_salary
-FROM employees
-GROUP BY department;
+SELECT cus.name,
+SUM(par.quantity * p.price) AS total_spent
+FROM customers AS cus
+INNER JOIN orders AS ord
+	ON cus.customer_id = ord.customer_id
+INNER JOIN order_items AS par
+	ON ord.order_id = par.order_id
+INNER JOIN products AS p
+	ON par.product_id = p.product_id
+GROUP BY cus.name
+ORDER BY total_spent DESC
+LIMIT 3;
 
--- ============================================
--- 3. Top Performers
--- ============================================
-SELECT department, first_name, salary
-FROM employees e1
-WHERE salary= (
-				SELECT MAX(salary)
-                FROM employees e2
-                WHERE e1.department=e2.department
-)
-;
--- ============================================
--- 4. Salary Analysis
--- ============================================
-SELECT first_name, (salary), department, AVG(salary) 
-OVER (PARTITION BY department) AS dept_avg_sal , 
-salary - AVG(salary)OVER (PARTITION BY department) AS salary_difference
-FROM employees;
-
--- ============================================
--- 5. Ranking
--- ============================================
-SELECT first_name, salary,
-RANK () OVER (PARTITION BY DEPARTMENT ORDER BY salary DESC) AS rank_num
-from employees;
-
--- ============================================
--- 6. Salary Categories
--- ============================================
-SELECT first_name, salary, department,
-CASE 
-    WHEN salary < 2000 THEN 'Low'
-    WHEN salary BETWEEN 2000 AND 5000 THEN 'Medium'
-    WHEN salary > 5000 THEN 'High'
-END AS salary_categories
-FROM employees;
-
--- 7. Most Expensive Department
-SELECT department, SUM(salary) AS total_salary
-FROM employees
-GROUP BY department
-ORDER BY total_salary DESC
+-- Revenue by category?
+SELECT category,
+SUM(par.quantity * p.price) AS total_spent
+FROM order_items AS par
+INNER JOIN products AS p
+	ON par.product_id = p.product_id
+GROUP BY category
+ORDER BY total_spent DESC
 LIMIT 1;
 
--- ============================================
--- Find:Employees earning above their department average
--- ============================================
+-- Most popular product
+SELECT p.product_name,
+SUM(ord.quantity) AS total_sold
+FROM products AS p
+INNER JOIN order_items AS ord
+	ON p.product_id = ord.product_id
+GROUP BY p.product_name
+ORDER BY total_sold DESC
+LIMIT 1;
 
-SELECT first_name, salary,department
-FROM employees e1
-WHERE salary > ( 
-				 SELECT AVG(salary) 
-                 FROM employees e2
-                WHERE e1.department= e2.department
-);
+-- Customers above average spending
+SELECT cus.name,
+SUM(par.quantity * p.price) AS total_spent
+FROM customers AS cus
+INNER JOIN orders AS ord 
+	ON cus.customer_id = ord.customer_id
+INNER JOIN order_items AS par 
+	ON ord.order_id = par.order_id
+INNER JOIN products AS p 
+	ON par.product_id = p.product_id
+GROUP BY cus.name;
 
+-- Calculate average 
+SELECT AVG(customer_total) AS avg_customer_spending
+FROM (
+    SELECT cus.customer_id,
+    SUM(par.quantity * p.price) AS customer_total
+    FROM customers AS cus
+    INNER JOIN orders AS ord 
+        ON cus.customer_id = ord.customer_id
+    INNER JOIN order_items AS par 
+        ON ord.order_id = par.order_id
+    INNER JOIN products AS p 
+        ON par.product_id = p.product_id
+    GROUP BY cus.customer_id
+) AS sub;
 
-
-
-
-
-
+-- Comparison 
+SELECT cus.name,
+SUM(par.quantity * p.price) AS total_spent
+FROM customers AS cus
+INNER JOIN orders AS ord 
+	ON cus.customer_id = ord.customer_id
+INNER JOIN order_items AS par 
+	ON ord.order_id = par.order_id
+INNER JOIN products AS p 
+	ON par.product_id = p.product_id
+GROUP BY cus.name
+HAVING total_spent > (
+    SELECT AVG(customer_total)
+    FROM (
+        SELECT cus.customer_id,
+        SUM(par.quantity * p.price) AS customer_total
+        FROM customers AS cus
+        INNER JOIN orders AS ord 
+            ON cus.customer_id = ord.customer_id
+        INNER JOIN order_items AS par 
+            ON ord.order_id = par.order_id
+        INNER JOIN products AS p 
+            ON par.product_id = p.product_id
+        GROUP BY cus.customer_id
+    ) AS sub
+)
+ORDER BY total_spent DESC;
